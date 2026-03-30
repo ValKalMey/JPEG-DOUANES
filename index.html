@@ -636,20 +636,31 @@ async function processFiles(files) {
 }
 
 function addWatermark(ctx, w, h) {
-  const fontSize = Math.max(14, Math.round(w * 0.022));
-  ctx.font = `${fontSize}px Lato, sans-serif`;
+  const year = new Date().getFullYear();
+  const text = `© ${year} Galler all reproduction rights reserved for all countries`;
+  const fontSize = Math.max(12, Math.round(w * 0.022));
+  ctx.save();
+  ctx.font = `${fontSize}px sans-serif`;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  const text = '© Tous droits réservés à Galler SA';
-  const y = h - Math.round(h * 0.04);
-  ctx.shadowColor = 'rgba(0,0,0,0.85)';
-  ctx.shadowBlur = 6;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255,255,255,0.52)';
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = 4;
   ctx.shadowOffsetX = 1;
   ctx.shadowOffsetY = 1;
-  ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  ctx.fillText(text, w / 2, y);
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
+  const angle = -30 * Math.PI / 180;
+  const spacingX = Math.round(w * 0.38);
+  const spacingY = Math.round(h * 0.18);
+  for (let x = -w; x < w * 2; x += spacingX) {
+    for (let y = -h; y < h * 2; y += spacingY) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    }
+  }
+  ctx.restore();
 }
 
 function canvasToBlob(canvas, quality) {
