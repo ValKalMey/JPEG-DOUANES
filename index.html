@@ -391,7 +391,7 @@ async function processVisuels(files) {
       const canvases = [];
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
-        const vp = page.getViewport({ scale: 3 });
+        const vp = page.getViewport({ scale: 2 });
         const cv = makeCanvas(vp.width, vp.height);
         await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
         canvases.push({ cv, label: 'page' + p });
@@ -400,9 +400,9 @@ async function processVisuels(files) {
       items.push({ name, canvases });
     } else if (isImg) {
       const name = f.name.replace(/\.[^.]+$/, '');
-      const cv = await imgFileToCanvas(f, 3);
+      const cv = await imgFileToCanvas(f);
       total++;
-      items.push({ name, canvases: [{ cv, label: 'p1' }] });
+      items.push({ name, canvases: [{ cv, label: 'p1', srcFile: f }] });
     }
   }
 
@@ -420,17 +420,25 @@ async function processVisuels(files) {
       const pageIdx = i + 1;
       updateProgress('v', done, total, name + ' — ' + label);
 
-      // JPEG BD (72dpi → scale down to ~screen resolution, quality 75)
-      const bdW = Math.round(cv.width / 3); // scale 3 → divide by 3 → 1x = 72dpi equivalent
-      const bdH = Math.round(cv.height / 3);
+      // JPEG BD (72dpi equivalent — scale down, preserve colors)
+      const bdW = Math.round(cv.width / 2);
+      const bdH = Math.round(cv.height / 2);
       const bdCv = makeCanvas(bdW, bdH);
-      bdCv.getContext('2d').drawImage(cv, 0, 0, bdW, bdH);
-      const bdBlob = await toBlob(bdCv, 0.75, 'jpeg');
+      const bdCtx = bdCv.getContext('2d');
+      bdCtx.imageSmoothingEnabled = true;
+      bdCtx.imageSmoothingQuality = 'high';
+      bdCtx.drawImage(cv, 0, 0, bdW, bdH);
+      const bdBlob = await toBlob(bdCv, 0.82, 'jpeg');
       const bdName = name + (canvases.length > 1 ? '_page' + pageIdx : '') + '_BD.jpg';
 
-      // PNG HD (full resolution, transparent background preserved)
-      const hdBlob = await toBlob(cv, 1.0, 'png');
-      const hdName = name + (canvases.length > 1 ? '_page' + pageIdx : '') + '_HD.png';
+      // PNG HD — return original file bytes untouched if source is PNG
+      const srcFile = canvases[i].srcFile;
+      const hdBlob = (srcFile && srcFile.type === 'image/png')
+        ? srcFile
+        : (srcFile && srcFile.type === 'image/jpeg')
+          ? srcFile
+          : await toBlob(cv, 1.0, 'png');
+      const hdName = name + (canvases.length > 1 ? '_page' + pageIdx : '') + '.png';
 
       // GS1 (4000x4000, white background, max 3MB)
       const gs1Cv = makeCanvas(4000, 4000);
@@ -562,18 +570,16 @@ function updateProgress(tab, done, total, label) {
   document.getElementById('prog-pct-' + tab).textContent = pct + '%';
   document.getElementById('prog-text-' + tab).textContent = label;
 }
-async function imgFileToCanvas(file, scale) {
-  return new Promise((res) => {
-    const img = new Image();
-    img.onload = () => {
-      const cv = makeCanvas(img.width * scale, img.height * scale);
-      const ctx = cv.getContext('2d');
-      ctx.drawImage(img, 0, 0, cv.width, cv.height);
-      res(cv);
-    };
-    img.src = URL.createObjectURL(file);
-  });
+async function imgFileToCanvas(file) {
+  // Use colorSpaceConversion:'none' to avoid any browser color transforms
+  const bmp = await createImageBitmap(file, { colorSpaceConversion: 'none' });
+  const cv = makeCanvas(bmp.width, bmp.height);
+  const ctx = cv.getContext('2d', { colorSpace: 'srgb', willReadFrequently: false });
+  ctx.drawImage(bmp, 0, 0);
+  bmp.close();
+  return cv;
 }
+
 </script>
 </body>
 </html>
